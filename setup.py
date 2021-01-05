@@ -11,18 +11,21 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='tcp_proxy_server',
-    version='0.0.1',
-    author='Manfred Kaiser',
-    author_email='manfred.kaiser@logfile.at',
+    version='0.0.2',
+    author='SSH-MITM Dev-Team',
+    author_email='support@ssh-mitm.at',
     description='tcp proxy server to intercept tcp',
     long_description=long_description,
     long_description_content_type='text/markdown',
     packages=find_packages(),
-    url="https://github.com/manfred-kaiser/tcp-proxy-server",
-    python_requires='>= 3.5',
+    url="https://github.com/ssh-mitm/tcp-proxy-server",
+    python_requires='>= 3.6',
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
         "Topic :: System :: Networking"
     ]
 )
