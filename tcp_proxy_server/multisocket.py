@@ -102,7 +102,7 @@ def create_server_sock(
     """
     AF_INET6 = getattr(socket, 'AF_INET6', 0)
     host, port = address
-    if host == "0.0.0.0":
+    if host == "" or host == "0.0.0.0":
         # http://mail.python.org/pipermail/python-ideas/2013-March/019937.html
         host = None
     if host is None and dual_stack:
