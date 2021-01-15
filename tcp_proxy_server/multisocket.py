@@ -42,11 +42,7 @@ def has_dual_stack(sock=None):
     listen for both IPv4 and IPv6 connections.
     If *sock* is provided the check is made against it.
     """
-    try:
-        socket.AF_INET6
-        socket.IPPROTO_IPV6
-        socket.IPV6_V6ONLY
-    except AttributeError:
+    if not hasattr(socket, 'AF_INET6') or not hasattr(socket, 'IPPROTO_IPV6') or not hasattr(socket, 'IPV6_V6ONLY'):
         return False
     try:
         if sock is not None:
@@ -101,7 +97,7 @@ def create_server_sock(
     """
     AF_INET6 = getattr(socket, 'AF_INET6', 0)
     host, port = address
-    if host == "" or host == "0.0.0.0":
+    if host == "" or host == "0.0.0.0":  # nosec
         # http://mail.python.org/pipermail/python-ideas/2013-March/019937.html
         host = None
     if host is None and dual_stack:
