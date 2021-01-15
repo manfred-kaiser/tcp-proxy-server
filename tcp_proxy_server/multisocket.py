@@ -42,20 +42,15 @@ def has_dual_stack(sock=None):
     listen for both IPv4 and IPv6 connections.
     If *sock* is provided the check is made against it.
     """
-    try:
-        socket.AF_INET6
-        socket.IPPROTO_IPV6
-        socket.IPV6_V6ONLY
-    except AttributeError:
+    if not hasattr(socket, 'AF_INET6') or not hasattr(socket, 'IPPROTO_IPV6') or not hasattr(socket, 'IPV6_V6ONLY'):
         return False
     try:
         if sock is not None:
             return not sock.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY)
-        else:
-            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            with contextlib.closing(sock):
-                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
-                return True
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        with contextlib.closing(sock):
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
+            return True
     except socket.error:
         return False
 
@@ -102,7 +97,7 @@ def create_server_sock(
     """
     AF_INET6 = getattr(socket, 'AF_INET6', 0)
     host, port = address
-    if host == "" or host == "0.0.0.0":
+    if host == "" or host == "0.0.0.0":  # nosec
         # http://mail.python.org/pipermail/python-ideas/2013-March/019937.html
         host = None
     if host is None and dual_stack:
@@ -143,8 +138,7 @@ def create_server_sock(
                 sock.close()
     if err is not None:
         raise err
-    else:
-        raise socket.error("getaddrinfo returns an empty list")
+    raise socket.error("getaddrinfo returns an empty list")
 
 
 class MultipleSocketsListener:
@@ -274,171 +268,3 @@ class MultipleSocketsListener:
         self._multicall('close')
         self._socks = []
         self._sockmap.clear()
-
-
-# ===================================================================
-# --- tests
-# ===================================================================
-
-
-if __name__ == '__main__':
-    import unittest
-    import threading
-    import errno
-    import time
-    try:
-        from test.support import find_unused_port  # PY3
-    except ImportError:
-        from test.test_support import find_unused_port  # PY2
-
-    class TestCase(unittest.TestCase):
-
-        def echo_server(self, sock):
-            def run():
-                with contextlib.closing(sock):
-                    conn, _ = sock.accept()
-                    with contextlib.closing(conn) as conn:
-                        msg = conn.recv(1024)
-                        if not msg:
-                            return
-                        conn.sendall(msg)
-
-            t = threading.Thread(target=run)
-            t.start()
-            time.sleep(.1)
-
-        def test_create_server_sock(self):
-            port = find_unused_port()
-            sock = create_server_sock((None, port))
-            with contextlib.closing(sock):
-                self.assertEqual(sock.getsockname()[1], port)
-                self.assertEqual(sock.type, socket.SOCK_STREAM)
-                if has_dual_stack():
-                    self.assertEqual(sock.family, socket.AF_INET6)
-                else:
-                    self.assertEqual(sock.family, socket.AF_INET)
-                self.echo_server(sock)
-                cl = socket.create_connection(('localhost', port), timeout=2)
-                with contextlib.closing(cl):
-                    cl.sendall(b'foo')
-                    self.assertEqual(cl.recv(1024), b'foo')
-
-        def test_has_dual_stack(self):
-            # IPv4 sockets are not supposed to support dual stack
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            with contextlib.closing(sock):
-                sock.bind(("", 0))
-                self.assertFalse(has_dual_stack(sock=sock))
-
-        def test_dual_stack(self):
-            sock = create_server_sock((None, 0))
-            with contextlib.closing(sock):
-                self.echo_server(sock)
-                port = sock.getsockname()[1]
-                cl = socket.create_connection(("127.0.0.1", port), timeout=2)
-                with contextlib.closing(cl):
-                    cl.sendall(b'foo')
-                    self.assertEqual(cl.recv(1024), b'foo')
-
-            sock = create_server_sock((None, 0))
-            with contextlib.closing(sock):
-                self.echo_server(sock)
-                port = sock.getsockname()[1]
-                if has_dual_stack():
-                    self.assertTrue(has_dual_stack(sock=sock))
-                    cl = socket.create_connection(("::1", port), timeout=2)
-                    with contextlib.closing(cl):
-                        cl.sendall(b'foo')
-                        self.assertEqual(cl.recv(1024), b'foo')
-                else:
-                    self.assertFalse(has_dual_stack(sock=sock))
-                    try:
-                        socket.create_connection(("::1", port))
-                    except socket.error as err:
-                        if os.name == 'nt':
-                            code = errno.WSAECONNREFUSED
-                        else:
-                            code = errno.ECONNREFUSED
-                        self.assertEqual(err.errno, code)
-                    else:
-                        self.fail('exception not raised')
-
-                    # just stop server
-                    cl = socket.create_connection(("127.0.0.1", port), timeout=2)
-                    with contextlib.closing(sock):
-                        cl.sendall(b'foo')
-                        cl.recv(1024)
-                    if hasattr(unittest, 'skip'):  # PY >= 2.7
-                        unittest.skip('dual stack cannot be tested as not '
-                                      'supported')
-
-        # --- multiple listener tests
-
-        def test_mlistener(self):
-            port = find_unused_port()
-            # v4
-            sock = MultipleSocketsListener(
-                [('127.0.0.1', port), ('::1', port)])
-            with contextlib.closing(sock):
-                self.echo_server(sock)
-                port = sock.getsockname()[1]
-                cl = socket.create_connection(("127.0.0.1", port), timeout=2)
-                with contextlib.closing(cl):
-                    cl.sendall(b'foo')
-                    self.assertEqual(cl.recv(1024), b'foo')
-            # v6
-            sock = MultipleSocketsListener(
-                [('127.0.0.1', port), ('::1', port)])
-            with contextlib.closing(sock):
-                self.echo_server(sock)
-                port = sock.getsockname()[1]
-                cl = socket.create_connection(("::1", port), timeout=2)
-                with contextlib.closing(cl):
-                    cl.sendall(b'foo')
-                    self.assertEqual(cl.recv(1024), b'foo')
-
-        def test_mlistener_timeout(self):
-            sock = MultipleSocketsListener([('127.0.0.1', 0), ('::1', 0)])
-            sock.settimeout(.01)
-            self.assertRaises(socket.timeout, sock.accept)
-
-        def test_mlistener_nonblocking(self):
-            sock = MultipleSocketsListener([('127.0.0.1', 0), ('::1', 0)])
-            sock.setblocking(False)
-            try:
-                sock.accept()
-            except socket.error as err:
-                if os.name == 'nt':
-                    code = errno.WSAEWOULDBLOCK
-                else:
-                    code = errno.EAGAIN
-                self.assertEqual(err.errno, code)
-            else:
-                self.fail('exception not raised')
-
-        def test_mlistener_ctx_manager(self):
-            with MultipleSocketsListener([("0.0.0.0", 0), ("::", 0)]) as msl:
-                pass
-            self.assertEqual(msl._socks, [])
-            self.assertEqual(msl._sockmap, {})
-
-        def test_mlistener_overridden_meths(self):
-            with MultipleSocketsListener([("0.0.0.0", 0), ("::", 0)]) as msl:
-                self.assertEqual(
-                    bool(msl.getsockopt(
-                        socket.SOL_SOCKET, socket.SO_REUSEADDR)),
-                    os.name == 'posix')
-                self.assertEqual(msl.getsockname()[0], "0.0.0.0")
-                self.assertTrue(msl.filenos())
-                msl.setblocking(True)
-                msl.settimeout(2)
-                self.assertEqual(msl.gettimeout(), 2)
-                try:
-                    msl.setsockopt(
-                        socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-                except socket.error:
-                    pass
-
-    test_suite = unittest.TestSuite()
-    test_suite.addTest(unittest.makeSuite(TestCase))
-    unittest.TextTestRunner(verbosity=2).run(test_suite)
