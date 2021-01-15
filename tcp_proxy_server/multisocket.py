@@ -51,11 +51,10 @@ def has_dual_stack(sock=None):
     try:
         if sock is not None:
             return not sock.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY)
-        else:
-            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            with contextlib.closing(sock):
-                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
-                return True
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+        with contextlib.closing(sock):
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, False)
+            return True
     except socket.error:
         return False
 
@@ -143,8 +142,7 @@ def create_server_sock(
                 sock.close()
     if err is not None:
         raise err
-    else:
-        raise socket.error("getaddrinfo returns an empty list")
+    raise socket.error("getaddrinfo returns an empty list")
 
 
 class MultipleSocketsListener:
